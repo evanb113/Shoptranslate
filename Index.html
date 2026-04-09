@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ShopTranslate — Collision Repair Estimate Translator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&display=swap');
+  :root { --bg:#0d1117;--card:#161b22;--card2:#1e2430;--border:#30363d;--accent:#f0a500;--red:#d94f3b;--green:#27c55a;--text:#e6edf3;--muted:#6e7681; }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:40px}
+  .header{background:var(--card);border-bottom:3px solid var(--accent);padding:0 18px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+  .logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;letter-spacing:3px;text-transform:uppercase;color:var(--accent)}
+  .logo em{color:var(--text);font-style:normal}
+  .badge{background:var(--red);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 9px;border-radius:3px}
+  .wrap{max-width:780px;margin:0 auto;padding:20px 14px}
+  .lang-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .page-title{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .lang-toggle{display:flex;border:2px solid var(--border);border-radius:8px;overflow:hidden}
+  .lang-btn{padding:9px 15px;background:var(--card);border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:background .15s,color .15s}
+  .lang-btn:first-child{border-right:2px solid var(--border)}
+  .lang-btn.on{background:var(--accent);color:#000}
+  .mode-tabs{display:flex;border:2px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px}
+  .mode-tab{flex:1;padding:10px 8px;background:var(--card);border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-right:2px solid var(--border)}
+  .mode-tab:last-child{border-right:none}
+  .mode-tab.on{background:var(--card2);color:var(--text)}
+  .drop{background:var(--card);border:2px dashed var(--border);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:14px}
+  .drop.over{border-color:var(--accent);background:rgba(240,165,0,.05)}
+  .drop.ready{border-style:solid;border-color:var(--green);background:rgba(39,197,90,.04);padding:22px 20px}
+  .drop-icon{font-size:38px;margin-bottom:12px}
+  .drop-title{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .drop-sub{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+  .fmt-row{display:flex;gap:6px;justify-content:center}
+  .fmt{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border:1px solid var(--border);border-radius:3px;color:var(--muted)}
+  .file-ready{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+  .file-name{color:var(--green);font-weight:600;font-size:14px;word-break:break-all}
+  .btn-remove{background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  input[type=file]{display:none}
+  canvas{display:none}
+  .text-area-wrap{margin-bottom:14px}
+  .text-area-wrap textarea{width:100%;min-height:160px;background:var(--card);border:2px solid var(--border);border-radius:12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;line-height:1.6;padding:16px;resize:vertical;outline:none;transition:border-color .2s}
+  .text-area-wrap textarea:focus{border-color:var(--accent)}
+  .text-area-wrap textarea::placeholder{color:var(--muted)}
+  .progress-wrap{height:6px;background:var(--border);border-radius:3px;margin-bottom:14px;overflow:hidden;display:none}
+  .progress-wrap.show{display:block}
+  .progress-bar{height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .3s ease}
+  .status{font-size:13px;color:var(--muted);margin-bottom:14px;min-height:18px;display:flex;align-items:center;gap:8px;line-height:1.4}
+  .status.err{color:var(--red)}
+  .status.ok{color:var(--green)}
+  .spin{width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;display:none}
+  .spin.show{display:block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .btn{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:13px 22px;border:none;border-radius:7px;cursor:pointer;transition:opacity .15s,background .15s}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn-go{background:var(--accent);color:#000}
+  .btn-clear{background:var(--card2);color:var(--text);border:1.5px solid var(--border)}
+  .btn-print{background:var(--green);color:#000;margin-left:auto}
+  .output-box{background:var(--card);border:1.5px solid var(--border);border-radius:10px;overflow:hidden;display:none}
+  .output-box.show{display:block}
+  .output-head{background:var(--card2);border-bottom:1px solid var(--border);padding:10px 14px;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+  .output-body{padding:16px;font-size:13px;line-height:1.8;white-space:pre-wrap;max-height:500px;overflow-y:auto;color:var(--text)}
+  @media print{body{background:#fff;color:#000;padding:0}.header,.lang-row,.mode-tabs,.drop,.text-area-wrap,.btn-row,.status,.progress-wrap{display:none!important}.wrap{padding:0;max-width:100%}.output-box{display:block!important;border:none}.output-head{background:#eee;color:#333;border-bottom:1px solid #ccc}.output-body{color:#000;font-size:12px;max-height:none;line-height:1.7}}
+</style>
+</head>
+<body>
+<div class="header"><div class="logo">Shop<em>Translate</em></div><div class="badge">Collision Repair</div></div>
+<div class="wrap">
+  <div class="lang-row">
+    <div class="page-title">Estimate Translator</div>
+    <div class="lang-toggle">
+      <button class="lang-btn on" id="btnEs" onclick="setLang('es')">🇲🇽 Spanish</button>
+      <button class="lang-btn" id="btnBoth" onclick="setLang('both')">🇺🇸/🇲🇽 Both</button>
+    </div>
+  </div>
+  <div class="mode-tabs">
+    <button class="mode-tab on" id="tabPhoto" onclick="setMode('photo')">📷 Photo / PDF</button>
+    <button class="mode-tab" id="tabText" onclick="setMode('text')">⌨️ Paste Text</button>
+  </div>
+  <div id="photoMode">
+    <div class="drop" id="dropZone" onclick="document.getElementById('fileIn').click()">
+      <div class="drop-icon" id="dropIcon">📄</div>
+      <div id="dropDefault">
+        <div class="drop-title">Drop or tap to load estimate</div>
+        <div class="drop-sub">PDF from Mitchell / CCC ONE, or a photo of a printed estimate</div>
+        <div class="fmt-row"><span class="fmt">PDF</span><span class="fmt">JPG</span><span class="fmt">PNG</span></div>
+      </div>
+      <div class="file-ready" id="fileReady" style="display:none">
+        <span class="file-name" id="fileName"></span>
+        <button class="btn-remove" onclick="clearFile(event)">✕ Remove</button>
+      </div>
+    </div>
+    <input type="file" id="fileIn" accept=".pdf,.jpg,.jpeg,.png,image/*" onchange="onFileChosen(this.files[0])">
+    <canvas id="cvs"></canvas>
+  </div>
+  <div id="textMode" style="display:none">
+    <div class="text-area-wrap">
+      <textarea id="pasteArea" placeholder="Paste estimate text here..."></textarea>
+    </div>
+  </div>
+  <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="status" id="statusBar"><div class="spin" id="spin"></div><span id="statusMsg">Choose a photo/PDF or paste text to get started.</span></div>
+  <div class="btn-row">
+    <button class="btn btn-go" id="btnGo" onclick="runTranslate()" disabled>⚡ Translate</button>
+    <button class="btn btn-clear" onclick="resetAll()">Clear</button>
+    <button class="btn btn-print" id="btnPrint" onclick="window.print()" disabled>🖨 Print</button>
+  </div>
+  <div class="output-box" id="outputBox">
+    <div class="output-head" id="outputHead">Spanish Translation 🇲🇽</div>
+    <div class="output-body" id="outputBody"></div>
+  </div>
+</div>
+<script>
+var lang='es',mode='photo',currentFile=null,imageDataUrl=null,busy=false;
+var GLOSSARY=[['R&I','XRII','Retirar e instalar'],['R&R','XRRR','Retirar y reemplazar'],['Blend','XBLD','Difuminar'],['Featheredge','XFED','Lijar en degradado'],['Block sand','XBSD','Lijar con taco'],['Block Sand','XBSD','Lijar con taco'],['Primer','XPRM','Imprimante'],['Prime','XPRI','Aplicar imprimante'],['OEM','XOEM','OEM (pieza original)'],['LKQ','XLKQ','Pieza usada'],['CAPA','XCPA','Pieza certificada CAPA'],['Aftermarket','XAFT','Pieza alternativa'],['Sublet','XSBL','Trabajo externo'],['Frame pull','XFPU','Enderezar bastidor'],['Frame Pull','XFPU','Enderezar bastidor'],['Unibody','XUNB','Carrocería integral'],['Quarter panel','XQPN','Aleta trasera'],['Quarter Panel','XQPN','Aleta trasera'],['Rocker panel','XRKP','Umbral de puerta'],['Rocker Panel','XRKP','Umbral de puerta'],['Pinch weld','XPWL','Soldadura de brida'],['PDR','XPDR','Reparación sin pintura (PDR)'],['Deductible','XDED','Deducible'],['Supplement','XSUP','Suplemento'],['Total loss','XTLS','Pérdida total'],['Total Loss','XTLS','Pérdida total'],['Fender','XFND','Salpicadera'],['Hood','XHOD','Capó'],['Trunk lid','XTKL','Tapa de cajuela'],['Trunk Lid','XTKL','Tapa de cajuela'],['Bumper cover','XBPC','Fascia'],['Bumper Cover','XBPC','Fascia'],['Grille','XGRL','Parrilla'],['Headlamp','XHDL','Faro delantero'],['Tail lamp','XTLP','Faro trasero'],['Tail Lamp','XTLP','Faro trasero'],['Door shell','XDSH','Estructura de puerta'],['Door Shell','XDSH','Estructura de puerta'],['Core support','XCRS','Soporte del radiador'],['Core Support','XCRS','Soporte del radiador'],['Clear coat','XCLC','Barniz'],['Clear Coat','XCLC','Barniz'],['Base coat','XBSC','Base de color'],['Base Coat','XBSC','Base de color'],['Sealer','XSLR','Sellador'],['Cavity Wax','XCWX','Cera de cavidad'],['Adhesion Promoter','XADP','Promotor de adhesión'],['Flex Additive','XFLX','Aditivo flexible'],['Pre Scan','XPSC','Escaneo previo'],['Post Scan','XPST','Escaneo posterior'],['Four Wheel Alignment','XFWA','Alineación de cuatro ruedas'],['D&R Battery','XDBT','Desconectar batería'],['Rope Windshield','XRWS','Sellado de parabrisas'],['Restore Corrosion Protection','XRCP','Restaurar protección anticorrosión'],['Clean & Re-Tape Moldings','XCRT','Limpiar y recolocar molduras'],['Cover Car','XCVC','Cubrir vehículo'],['Overspray','XOVS','Sobreespray'],['Refinish','XRFN','Refinish'],['Replace','XRPL','Reemplazar'],['Remove','XRMV','Retirar'],['Install','XINS','Instalar'],['Repair','XRPR','Reparar'],['Additional Operations','XAOP','Operaciones adicionales'],['Additional Costs','XADC','Costos adicionales'],['Hazardous Waste Disposal','XHWD','Desecho de materiales peligrosos'],['Paint/Materials','XPMT','Pintura/Materiales'],['Labor','XLBR','Mano de obra'],['Parts','XPTS','Partes'],['Total','XTOT','Total'],['Tax','XTAX','Impuesto'],['Existing','XEXI','Existente']];
+function preProcess(t){GLOSSARY.forEach(function(e){var r=new RegExp(e[0].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g');t=t.replace(r,' '+e[1]+' ')});return t}
+function postProcess(t){GLOSSARY.forEach(function(e){var r=new RegExp(e[1],'g');t=t.replace(r,e[2])});return t}
+function setLang(l){lang=l;document.getElementById('btnEs').className='lang-btn'+(l==='es'?' on':'');document.getElementById('btnBoth').className='lang-btn'+(l==='both'?' on':'');document.getElementById('outputHead').textContent=l==='both'?'English / Spanish 🇺🇸🇲🇽':'Spanish Translation 🇲🇽'}
+function setMode(m){mode=m;document.getElementById('tabPhoto').className='mode-tab'+(m==='photo'?' on':'');document.getElementById('tabText').className='mode-tab'+(m==='text'?' on':'');document.getElementById('photoMode').style.display=m==='photo'?'block':'none';document.getElementById('textMode').style.display=m==='text'?'block':'none';document.getElementById('outputBox').classList.remove('show');document.getElementById('btnPrint').disabled=true;if(m==='text'){document.getElementById('pasteArea').addEventListener('input',onTextInput);onTextInput()}else{document.getElementById('btnGo').disabled=!currentFile}setStatus('','')}
+function onTextInput(){document.getElementById('btnGo').disabled=document.getElementById('pasteArea').value.trim().length<3}
+function setStatus(msg,type){document.getElementById('statusMsg').textContent=msg;document.getElementById('statusBar').className='status'+(type?' '+type:'');document.getElementById('spin').className='spin'+(type==='loading'?' show':'')}
+function setProgress(pct){var w=document.getElementById('progressWrap'),b=document.getElementById('progressBar');if(pct===null){w.classList.remove('show');b.style.width='0%';return}w.classList.add('show');b.style.width=pct+'%'}
+var dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('over')});
+dz.addEventListener('dragleave',function(){dz.classList.remove('over')});
+dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])onFileChosen(e.dataTransfer.files[0])});
+function onFileChosen(f){if(!f)return;currentFile=f;imageDataUrl=null;var r=new FileReader();r.onload=function(e){imageDataUrl=e.target.result;dz.classList.add('ready');document.getElementById('dropDefault').style.display='none';document.getElementById('dropIcon').textContent=f.type==='application/pdf'?'📋':'🖼️';document.getElementById('fileReady').style.display='flex';document.getElementById('fileName').textContent=f.name;document.getElementById('btnGo').disabled=false;document.getElementById('btnPrint').disabled=true;document.getElementById('outputBox').classList.remove('show');setStatus('File loaded — tap Translate.','')};r.onerror=function(){setStatus('Could not read file.','err')};r.readAsDataURL(f)}
+function clearFile(e){if(e)e.stopPropagation();currentFile=null;imageDataUrl=null;dz.classList.remove('ready');document.getElementById('dropDefault').style.display='block';document.getElementById('dropIcon').textContent='📄';document.getElementById('fileReady').style.display='none';document.getElementById('fileIn').value='';document.getElementById('btnGo').disabled=true;document.getElementById('btnPrint').disabled=true;document.getElementById('outputBox').classList.remove('show');setProgress(null);setStatus('','')}
+function resetAll(){clearFile(null);document.getElementById('pasteArea').value='';document.getElementById('btnGo').disabled=true;document.getElementById('outputBox').classList.remove('show');document.getElementById('btnPrint').disabled=true;setProgress(null);setStatus('','')}
+function translateChunk(chunk){var p=preProcess(chunk);var url='https://api.mymemory.translated.net/get?q='+encodeURIComponent(p)+'&langpair=en|es';return fetch(url).then(function(r){return r.json()}).then(function(d){var t=(d.responseData&&d.responseData.translatedText)?d.responseData.translatedText:p;return postProcess(t)})}
+function chunkLines(text){var lines=text.split('\n'),chunks=[],cur='';lines.forEach(function(l){if(cur.length+l.length+1>450&&cur.length>0){chunks.push(cur);cur=l}else{cur=cur?cur+'\n'+l:l}});if(cur.trim())chunks.push(cur);return chunks}
+function buildOutput(orig,trans){if(lang==='both'){var lines=[];orig.forEach(function(o,i){var t=trans[i]||'',oL=o.split('\n'),tL=t.split('\n');for(var j=0;j<Math.max(oL.length,tL.length);j++){var oo=(oL[j]||'').trim(),tt=(tL[j]||'').trim();lines.push(oo&&tt?oo+'  |  '+tt:oo||tt)}});return lines.join('\n')}return trans.join('\n')}
+function runChunks(orig,done){var trans=[],i=0;function next(){if(i>=orig.length){done(orig,trans);return}setProgress(60+Math.round((i/orig.length)*36));translateChunk(orig[i]).then(function(t){trans.push(t);i++;setTimeout(next,350)}).catch(function(){trans.push(orig[i]);i++;setTimeout(next,350)})}next()}
+function finishTranslation(orig,trans){var out=buildOutput(orig,trans);document.getElementById('outputBody').textContent=out;document.getElementById('outputBox').classList.add('show');document.getElementById('btnPrint').disabled=false;setProgress(100);setTimeout(function(){setProgress(null)},700);setStatus('✓ Translation complete — tap Print to print.','ok');busy=false;document.getElementById('btnGo').disabled=false}
+function runOCR(dataUrl,cb){setStatus('Reading image text (30–60s first time)...','loading');setProgress(15);var img=new Image();img.crossOrigin='anonymous';img.onload=function(){try{var c=document.getElementById('cvs');c.width=img.naturalWidth||img.width;c.height=img.naturalHeight||img.height;var ctx=c.getContext('2d');ctx.drawImage(img,0,0);var u=c.toDataURL('image/jpeg',.92);Tesseract.recognize(u,'eng',{logger:function(m){if(m.status==='recognizing text')setProgress(15+Math.round(m.progress*42))}}).then(function(r){cb(null,r.data.text)}).catch(function(e){cb(e.message||'OCR failed')})}catch(e){cb(e.message||'Canvas error')}};img.onerror=function(){cb('Could not load image.')};img.src=dataUrl}
+function extractPdfText(dataUrl,cb){setStatus('Reading PDF...','loading');setProgress(10);function go(){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';var b64=dataUrl.split(',')[1],bin=atob(b64),bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);pdfjsLib.getDocument({data:bytes}).promise.then(function(pdf){var all='',done=0,total=pdf.numPages;for(var p=1;p<=total;p++){(function(pn){pdf.getPage(pn).then(function(page){page.getTextContent().then(function(c){all+=c.items.map(function(i){return i.str}).join(' ')+'\n';done++;setProgress(10+Math.round((done/total)*48));if(done===total)cb(null,all)})})})(p)}}).catch(function(e){cb(e.message||'PDF read failed')})}
+if(typeof pdfjsLib!=='undefined'){go();return}var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=go;s.onerror=function(){cb('Could not load PDF reader.')};document.head.appendChild(s)}
+function runTranslate(){if(busy)return;busy=true;document.getElementById('btnGo').disabled=true;document.getElementById('outputBox').classList.remove('show');document.getElementById('btnPrint').disabled=true;setProgress(5);if(mode==='text'){var raw=document.getElementById('pasteArea').value.trim();if(!raw){setStatus('Paste some text first.','err');busy=false;document.getElementById('btnGo').disabled=false;return}setStatus('Translating...','loading');setProgress(30);runChunks(chunkLines(raw),finishTranslation);return}if(!imageDataUrl){setStatus('Load a file first.','err');busy=false;document.getElementById('btnGo').disabled=false;return}function afterText(err,raw){if(err){setProgress(null);setStatus('Error: '+err,'err');busy=false;document.getElementById('btnGo').disabled=false;return}if(!raw||raw.trim().length<5){setProgress(null);setStatus('Could not read text. Try a clearer photo or use Paste Text mode.','err');busy=false;document.getElementById('btnGo').disabled=false;return}setProgress(60);setStatus('Translating...','loading');runChunks(chunkLines(raw.trim()),finishTranslation)}if(currentFile&&currentFile.type==='application/pdf'){extractPdfText(imageDataUrl,afterText)}else{runOCR(imageDataUrl,afterText)}}
+</script>
+</body>
+</html>
