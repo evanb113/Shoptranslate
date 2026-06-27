@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
-import { getHolding } from '../game/gameModel';
+import { LEVERAGE_OPTIONS, getHolding, getUnrealizedPnL } from '../game/gameModel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AssetDetail'>;
 
@@ -11,9 +11,9 @@ export default function AssetDetailScreen({ route }: Props) {
   const { assetId } = route.params;
   const { assets, portfolio, buy, sell } = useGame();
   const [quantityText, setQuantityText] = useState('1');
+  const [leverage, setLeverage] = useState<number>(1);
 
   const asset = assets.find((a) => a.id === assetId);
-  const holding = asset ? getHolding(portfolio, asset.id) : undefined;
 
   if (!asset) {
     return (
@@ -23,25 +23,26 @@ export default function AssetDetailScreen({ route }: Props) {
     );
   }
 
+  const holding = getHolding(portfolio, asset.id);
   const quantity = Math.max(0, Math.floor(Number(quantityText) || 0));
-  const cost = quantity * asset.price;
+  const marginRequired = (quantity * asset.price) / leverage;
+
+  const positionLabel = !holding
+    ? 'No position'
+    : holding.quantity > 0
+      ? `Long ${holding.quantity} shares`
+      : `Short ${Math.abs(holding.quantity)} shares`;
+
+  const unrealizedPnL = holding ? getUnrealizedPnL(holding, asset.price) : 0;
 
   const handleBuy = () => {
     if (quantity <= 0) return;
-    if (cost > portfolio.cash) {
-      Alert.alert('Insufficient cash', `You need $${cost.toFixed(2)} but only have $${portfolio.cash.toFixed(2)}.`);
-      return;
-    }
-    buy(asset.id, quantity);
+    buy(asset.id, quantity, leverage);
   };
 
   const handleSell = () => {
     if (quantity <= 0) return;
-    if (!holding || quantity > holding.quantity) {
-      Alert.alert('Not enough shares', `You only own ${holding?.quantity ?? 0} shares of ${asset.symbol}.`);
-      return;
-    }
-    sell(asset.id, quantity);
+    sell(asset.id, quantity, leverage);
   };
 
   return (
@@ -51,14 +52,35 @@ export default function AssetDetailScreen({ route }: Props) {
       <Text style={styles.price}>${asset.price.toFixed(2)}</Text>
 
       <View style={styles.holdingBox}>
-        <Text style={styles.holdingText}>
-          You own: {holding?.quantity ?? 0} shares
-          {holding ? ` (avg $${holding.avgCost.toFixed(2)})` : ''}
-        </Text>
+        <Text style={styles.holdingText}>{positionLabel}</Text>
+        {holding && (
+          <>
+            <Text style={styles.holdingText}>Avg entry: ${holding.avgCost.toFixed(2)}</Text>
+            <Text style={[styles.holdingText, unrealizedPnL >= 0 ? styles.gain : styles.loss]}>
+              Unrealized P&L: {unrealizedPnL >= 0 ? '+' : ''}${unrealizedPnL.toFixed(2)}
+            </Text>
+            <Text style={styles.holdingText}>Margin posted: ${holding.marginPosted.toFixed(2)}</Text>
+          </>
+        )}
         <Text style={styles.holdingText}>Cash available: ${portfolio.cash.toFixed(2)}</Text>
       </View>
 
       <View style={styles.controls}>
+        <Text style={styles.label}>Leverage</Text>
+        <View style={styles.leverageRow}>
+          {LEVERAGE_OPTIONS.map((option) => (
+            <Pressable
+              key={option}
+              style={[styles.leverageButton, leverage === option && styles.leverageButtonActive]}
+              onPress={() => setLeverage(option)}
+            >
+              <Text style={[styles.leverageButtonText, leverage === option && styles.leverageButtonTextActive]}>
+                {option}x
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         <Text style={styles.label}>Quantity</Text>
         <TextInput
           style={styles.input}
@@ -66,14 +88,14 @@ export default function AssetDetailScreen({ route }: Props) {
           value={quantityText}
           onChangeText={setQuantityText}
         />
-        <Text style={styles.estimate}>Est. total: ${cost.toFixed(2)}</Text>
+        <Text style={styles.estimate}>Margin required to open: ${marginRequired.toFixed(2)}</Text>
 
         <View style={styles.buttonRow}>
           <Pressable style={[styles.button, styles.buyButton]} onPress={handleBuy}>
-            <Text style={styles.buttonText}>Buy</Text>
+            <Text style={styles.buttonText}>Buy / Cover</Text>
           </Pressable>
           <Pressable style={[styles.button, styles.sellButton]} onPress={handleSell}>
-            <Text style={styles.buttonText}>Sell</Text>
+            <Text style={styles.buttonText}>Sell / Short</Text>
           </Pressable>
         </View>
       </View>
@@ -87,9 +109,22 @@ const styles = StyleSheet.create({
   symbol: { fontSize: 14, color: '#666', marginBottom: 8 },
   price: { fontSize: 36, fontWeight: '700', marginBottom: 16 },
   holdingBox: { backgroundColor: '#f5f5f7', borderRadius: 8, padding: 12, marginBottom: 24 },
-  holdingText: { fontSize: 14, color: '#333' },
+  holdingText: { fontSize: 14, color: '#333', marginBottom: 2 },
+  gain: { color: '#1f8f4d', fontWeight: '600' },
+  loss: { color: '#c0392b', fontWeight: '600' },
   controls: { marginTop: 8 },
-  label: { fontSize: 14, color: '#666', marginBottom: 4 },
+  label: { fontSize: 14, color: '#666', marginBottom: 4, marginTop: 8 },
+  leverageRow: { flexDirection: 'row', gap: 8 },
+  leverageButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  leverageButtonActive: { backgroundColor: '#1f6feb', borderColor: '#1f6feb' },
+  leverageButtonText: { fontSize: 14, color: '#333', fontWeight: '600' },
+  leverageButtonTextActive: { color: '#fff' },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',

@@ -4,11 +4,11 @@ import {
   MarketEvent,
   Portfolio,
   buyAsset,
-  checkMarginCall,
   createInitialAssets,
   createInitialPortfolio,
   generateEvent,
   isBankrupt,
+  resolveMarginCall,
   sellAsset,
   tickPrices,
 } from './gameModel';
@@ -18,8 +18,8 @@ interface GameContextValue {
   assets: Asset[];
   events: MarketEvent[];
   bankrupt: boolean;
-  buy: (assetId: string, quantity: number) => void;
-  sell: (assetId: string, quantity: number) => void;
+  buy: (assetId: string, quantity: number, leverage: number) => void;
+  sell: (assetId: string, quantity: number, leverage: number) => void;
   tick: () => void;
   restart: () => void;
 }
@@ -33,38 +33,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [bankrupt, setBankrupt] = useState(false);
 
   const buy = useCallback(
-    (assetId: string, quantity: number) => {
+    (assetId: string, quantity: number, leverage: number) => {
       const asset = assets.find((a) => a.id === assetId);
       if (!asset) return;
-      setPortfolio((p) => buyAsset(p, asset, quantity));
+      setPortfolio((p) => buyAsset(p, asset, quantity, leverage));
     },
     [assets]
   );
 
   const sell = useCallback(
-    (assetId: string, quantity: number) => {
+    (assetId: string, quantity: number, leverage: number) => {
       const asset = assets.find((a) => a.id === assetId);
       if (!asset) return;
-      setPortfolio((p) => sellAsset(p, asset, quantity));
+      setPortfolio((p) => sellAsset(p, asset, quantity, leverage));
     },
     [assets]
   );
 
   const tick = useCallback(() => {
-    setAssets((prev) => {
-      const nextAssets = tickPrices(prev);
-      const event = generateEvent(nextAssets);
-      if (event) setEvents((e) => [event, ...e].slice(0, 20));
+    const nextAssets = tickPrices(assets);
+    const event = generateEvent(nextAssets);
+    const { portfolio: resolved, liquidatedSymbols } = resolveMarginCall(portfolio, nextAssets);
 
-      setPortfolio((p) => {
-        checkMarginCall(p, nextAssets);
-        if (isBankrupt(p, nextAssets)) setBankrupt(true);
-        return p;
-      });
+    setAssets(nextAssets);
+    setPortfolio(resolved);
 
-      return nextAssets;
-    });
-  }, []);
+    const liquidationEvents: MarketEvent[] = liquidatedSymbols.map((symbol, i) => ({
+      id: `${Date.now()}-liq-${i}`,
+      message: `Margin call: ${symbol} position force-liquidated.`,
+    }));
+    const newEvents = [...liquidationEvents, ...(event ? [event] : [])];
+    if (newEvents.length > 0) {
+      setEvents((e) => [...newEvents, ...e].slice(0, 20));
+    }
+
+    if (isBankrupt(resolved, nextAssets)) setBankrupt(true);
+  }, [assets, portfolio]);
 
   const restart = useCallback(() => {
     setAssets(createInitialAssets());
