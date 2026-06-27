@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
-import { LEVERAGE_OPTIONS, getHolding, getUnrealizedPnL } from '../game/gameModel';
+import { LEVERAGE_OPTIONS, formatPrice, getHolding, getUnrealizedPnL } from '../game/gameModel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AssetDetail'>;
 
@@ -48,14 +48,18 @@ export default function AssetDetailScreen({ route }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.name}>{asset.name}</Text>
-      <Text style={styles.symbol}>{asset.symbol}</Text>
-      <Text style={styles.price}>${asset.price.toFixed(2)}</Text>
+      <View style={styles.symbolRow}>
+        <Text style={styles.symbol}>{asset.symbol}</Text>
+        {asset.type === 'memecoin' && <Text style={styles.memeTag}>MEME</Text>}
+        {asset.rugged && <Text style={styles.ruggedTag}>JUST RUGGED</Text>}
+      </View>
+      <Text style={styles.price}>${formatPrice(asset.price)}</Text>
 
       <View style={styles.holdingBox}>
         <Text style={styles.holdingText}>{positionLabel}</Text>
         {holding && (
           <>
-            <Text style={styles.holdingText}>Avg entry: ${holding.avgCost.toFixed(2)}</Text>
+            <Text style={styles.holdingText}>Avg entry: ${formatPrice(holding.avgCost)}</Text>
             <Text style={[styles.holdingText, unrealizedPnL >= 0 ? styles.gain : styles.loss]}>
               Unrealized P&L: {unrealizedPnL >= 0 ? '+' : ''}${unrealizedPnL.toFixed(2)}
             </Text>
@@ -106,7 +110,26 @@ export default function AssetDetailScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
   name: { fontSize: 20, fontWeight: '600' },
-  symbol: { fontSize: 14, color: '#666', marginBottom: 8 },
+  symbolRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  symbol: { fontSize: 14, color: '#666' },
+  memeTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7a4ec9',
+    backgroundColor: '#efe3ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ruggedTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#c0392b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   price: { fontSize: 36, fontWeight: '700', marginBottom: 16 },
   holdingBox: { backgroundColor: '#f5f5f7', borderRadius: 8, padding: 12, marginBottom: 24 },
   holdingText: { fontSize: 14, color: '#333', marginBottom: 2 },

@@ -8,7 +8,7 @@
  * If your real signatures differ, update GameContext.tsx to match.
  */
 
-export type AssetType = 'stock' | 'crypto' | 'commodity' | 'bond';
+export type AssetType = 'stock' | 'crypto' | 'memecoin' | 'commodity' | 'bond';
 
 export interface Asset {
   id: string;
@@ -16,7 +16,14 @@ export interface Asset {
   name: string;
   type: AssetType;
   price: number;
+  /**
+   * For normal assets: the symmetric daily swing range (+/- volatility).
+   * For meme coins: a per-coin intensity multiplier applied to the shared
+   * meme swing/rug-pull mechanics — bigger means wilder.
+   */
   volatility: number;
+  /** True only on the tick a meme coin just got rug-pulled — transient, for event/UI flagging. */
+  rugged?: boolean;
 }
 
 /** quantity > 0 is a long position, quantity < 0 is a short position. */
@@ -60,7 +67,13 @@ export function createInitialAssets(): Asset[] {
     { id: 'aapl', symbol: 'AAPL', name: 'Apple Inc.', type: 'stock', price: 190, volatility: 0.02 },
     { id: 'tsla', symbol: 'TSLA', name: 'Tesla Inc.', type: 'stock', price: 250, volatility: 0.05 },
     { id: 'btc', symbol: 'BTC', name: 'Bitcoin', type: 'crypto', price: 65000, volatility: 0.08 },
+    { id: 'eth', symbol: 'ETH', name: 'Ethereum', type: 'crypto', price: 3200, volatility: 0.07 },
+    { id: 'sol', symbol: 'SOL', name: 'Solana', type: 'crypto', price: 145, volatility: 0.09 },
     { id: 'gold', symbol: 'GOLD', name: 'Gold', type: 'commodity', price: 2300, volatility: 0.01 },
+    { id: 'doge', symbol: 'DOGE', name: 'Dogecoin', type: 'memecoin', price: 0.15, volatility: 0.8 },
+    { id: 'shib', symbol: 'SHIB', name: 'Shiba Inu', type: 'memecoin', price: 0.000022, volatility: 1.0 },
+    { id: 'pepe', symbol: 'PEPE', name: 'Pepe', type: 'memecoin', price: 0.0000095, volatility: 1.3 },
+    { id: 'bonk', symbol: 'BONK', name: 'Bonk', type: 'memecoin', price: 0.000018, volatility: 1.15 },
   ];
 }
 
@@ -412,8 +425,71 @@ export function repayLoan(
   };
 }
 
+/** Daily chance (before per-coin intensity scaling) that a meme coin gets rug-pulled. */
+export const MEME_RUG_PULL_CHANCE = 0.04;
+/** Fraction of price wiped out by a rug pull. */
+export const MEME_RUG_PULL_DROP_RANGE: [number, number] = [0.7, 0.97];
+/** Overall daily swing range for meme coins on a non-rug day. */
+export const MEME_DAILY_CHANGE_RANGE: [number, number] = [-0.1, 3.0];
+/** Hard ceiling on meme coin price — without one, compounding +300% days over a long
+ * session can run away toward float overflow (Infinity/NaN). No real instrument needs
+ * to go higher than this for the game to feel rewarding. */
+export const MEME_PRICE_CAP = 1_000_000;
+
+/**
+ * Meme coin price action: mostly modest chop, occasionally an explosive
+ * moonshot (fat right tail up to +300%), and a small chance per day of a
+ * rug pull that wipes out 70-97% of the price in one tick.
+ */
+function tickMemeCoin(asset: Asset): Asset {
+  const intensity = asset.volatility || 1;
+  const [minDrop, maxDrop] = MEME_RUG_PULL_DROP_RANGE;
+  const [minChange, maxChange] = MEME_DAILY_CHANGE_RANGE;
+
+  if (Math.random() < MEME_RUG_PULL_CHANCE * intensity) {
+    const drop = minDrop + Math.random() * (maxDrop - minDrop);
+    const price = Math.max(1e-9, asset.price * (1 - drop));
+    return { ...asset, price: roundPrice(Math.min(price, MEME_PRICE_CAP)), rugged: true };
+  }
+
+  const roll = Math.random();
+  let changePct: number;
+  if (roll < 0.6) {
+    changePct = minChange + Math.random() * 0.3; // most days: small chop
+  } else if (roll < 0.9) {
+    changePct = minChange + Math.random() * 1.0; // less common: a real pump or dump
+  } else {
+    changePct = minChange + Math.random() * (maxChange - minChange); // rare: full moonshot
+  }
+  changePct *= intensity;
+
+  const price = Math.max(1e-9, asset.price * (1 + changePct));
+  return { ...asset, price: roundPrice(Math.min(price, MEME_PRICE_CAP)), rugged: false };
+}
+
+function roundPrice(price: number): number {
+  if (price <= 0) return 0;
+  if (price >= 1) return Math.round(price * 100) / 100;
+  if (price >= 0.01) return Math.round(price * 10000) / 10000;
+  // Sub-cent meme coin prices need a magnitude-aware decimal count: a fixed
+  // 8-decimal grid is fine near $0.00001, but becomes a large fraction of the
+  // price itself after enough compounding drops, distorting the actual % change.
+  const magnitude = Math.floor(Math.log10(price));
+  const decimals = Math.min(18, -magnitude + 4);
+  const factor = 10 ** decimals;
+  return Math.round(price * factor) / factor;
+}
+
+/** Formats a per-unit asset price, using extra decimal places for sub-cent meme coins. */
+export function formatPrice(price: number): string {
+  if (price >= 1) return price.toFixed(2);
+  if (price >= 0.01) return price.toFixed(4);
+  return price.toFixed(8);
+}
+
 export function tickPrices(assets: Asset[]): Asset[] {
   return assets.map((asset) => {
+    if (asset.type === 'memecoin') return tickMemeCoin(asset);
     const change = (Math.random() * 2 - 1) * asset.volatility;
     const price = Math.max(0.01, asset.price * (1 + change));
     return { ...asset, price: Math.round(price * 100) / 100 };
@@ -423,5 +499,7 @@ export function tickPrices(assets: Asset[]): Asset[] {
 export function generateEvent(assets: Asset[]): MarketEvent | null {
   if (Math.random() > 0.3) return null;
   const asset = assets[Math.floor(Math.random() * assets.length)];
-  return { id: `${Date.now()}`, message: `${asset.symbol} is making headlines.`, assetId: asset.id };
+  const message =
+    asset.type === 'memecoin' ? `${asset.symbol} is trending on social media.` : `${asset.symbol} is making headlines.`;
+  return { id: `${Date.now()}`, message, assetId: asset.id };
 }

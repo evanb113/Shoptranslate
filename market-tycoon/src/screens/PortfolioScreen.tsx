@@ -3,7 +3,14 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
-import { EXCHANGE_TIERS, EXCHANGE_UNLOCK_CASH, getMarginUsed, getNetWorth, getUnrealizedPnL } from '../game/gameModel';
+import {
+  EXCHANGE_TIERS,
+  EXCHANGE_UNLOCK_CASH,
+  formatPrice,
+  getMarginUsed,
+  getNetWorth,
+  getUnrealizedPnL,
+} from '../game/gameModel';
 import { useTutorial } from '../onboarding/TutorialContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Portfolio'>;
@@ -77,7 +84,7 @@ export default function PortfolioScreen({ navigation }: Props) {
                   {item.asset.symbol} {isShort ? '(Short)' : ''}
                 </Text>
                 <Text style={styles.qty}>
-                  {Math.abs(item.holding.quantity)} shares @ ${item.holding.avgCost.toFixed(2)}
+                  {Math.abs(item.holding.quantity)} shares @ ${formatPrice(item.holding.avgCost)}
                 </Text>
               </View>
               <Text style={[styles.value, pnl >= 0 ? styles.gain : styles.loss]}>
@@ -97,8 +104,12 @@ export default function PortfolioScreen({ navigation }: Props) {
             style={styles.row}
             onPress={() => navigation.navigate('AssetDetail', { assetId: asset.id })}
           >
-            <Text style={styles.symbol}>{asset.symbol}</Text>
-            <Text style={styles.value}>${asset.price.toFixed(2)}</Text>
+            <View style={styles.symbolRow}>
+              <Text style={styles.symbol}>{asset.symbol}</Text>
+              {asset.type === 'memecoin' && <Text style={styles.memeTag}>MEME</Text>}
+              {asset.rugged && <Text style={styles.ruggedTag}>RUGGED</Text>}
+            </View>
+            <Text style={styles.value}>${formatPrice(asset.price)}</Text>
           </Pressable>
         )}
       />
@@ -148,7 +159,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  symbolRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   symbol: { fontSize: 16, fontWeight: '600' },
+  memeTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7a4ec9',
+    backgroundColor: '#efe3ff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ruggedTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    backgroundColor: '#c0392b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
   qty: { fontSize: 12, color: '#666' },
   value: { fontSize: 16 },
   gain: { color: '#1f8f4d', fontWeight: '600' },

@@ -106,6 +106,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       id: `${Date.now()}-liq-${i}`,
       message: `Margin call: ${symbol} position force-liquidated.`,
     }));
+    const rugPullEvents: MarketEvent[] = nextAssets
+      .filter((a) => a.rugged)
+      .map((a, i) => ({
+        id: `${Date.now()}-rug-${i}`,
+        message: `${a.symbol} just got rug-pulled! Price collapsed.`,
+        assetId: a.id,
+      }));
     const businessEvents: MarketEvent[] = [];
     if (businessResult) {
       if (businessResult.net >= 0) {
@@ -127,7 +134,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const newEvents = [...liquidationEvents, ...businessEvents, ...(event ? [event] : [])];
+    const newEvents = [...liquidationEvents, ...rugPullEvents, ...businessEvents, ...(event ? [event] : [])];
     if (newEvents.length > 0) {
       setEvents((e) => [...newEvents, ...e].slice(0, 20));
     }
