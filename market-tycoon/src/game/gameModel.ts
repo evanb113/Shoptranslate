@@ -219,22 +219,98 @@ export function isBankrupt(portfolio: Portfolio, assets: Asset[], exchange?: Exc
 
 export interface Exchange {
   owned: boolean;
+  /** Index into EXCHANGE_TIERS — which building/location is currently owned. */
+  tier: number;
   employees: number;
   loanBalance: number;
 }
 
-export const EXCHANGE_PRICE = 2_000_000;
+/**
+ * Each tier is a different building in a different part of New York. Upgrading
+ * moves the business to a bigger, more expensive location, raises headcount
+ * capacity and per-employee revenue, but also lets employees take bigger swings —
+ * the revenue multiplier range widens and skews further negative, so high tiers
+ * can post much larger profits *or* much larger losses on a bad day.
+ */
+export interface ExchangeTier {
+  name: string;
+  location: string;
+  /** Cash cost to move into this tier (tier 0's is the initial purchase price). */
+  upgradeCost: number;
+  rentPerDay: number;
+  payrollPerEmployee: number;
+  suppliesPerEmployee: number;
+  maxEmployees: number;
+  baseRevenuePerEmployee: number;
+  /** [min, max] multiplier applied to base revenue per employee each day. */
+  revenueMultiplierRange: [number, number];
+}
+
+export const EXCHANGE_TIERS: ExchangeTier[] = [
+  {
+    name: 'Outer Borough Storefront',
+    location: 'Queens',
+    upgradeCost: 2_000_000,
+    rentPerDay: 5_000,
+    payrollPerEmployee: 300,
+    suppliesPerEmployee: 50,
+    maxEmployees: 20,
+    baseRevenuePerEmployee: 500,
+    revenueMultiplierRange: [0.3, 1.7],
+  },
+  {
+    name: 'Midtown Office',
+    location: 'Manhattan',
+    upgradeCost: 10_000_000,
+    rentPerDay: 15_000,
+    payrollPerEmployee: 450,
+    suppliesPerEmployee: 80,
+    maxEmployees: 35,
+    baseRevenuePerEmployee: 650,
+    revenueMultiplierRange: [0.0, 2.2],
+  },
+  {
+    name: 'Financial District Tower',
+    location: 'Lower Manhattan',
+    upgradeCost: 50_000_000,
+    rentPerDay: 35_000,
+    payrollPerEmployee: 650,
+    suppliesPerEmployee: 120,
+    maxEmployees: 60,
+    baseRevenuePerEmployee: 850,
+    revenueMultiplierRange: [-0.5, 3.0],
+  },
+  {
+    name: 'Park Avenue Headquarters',
+    location: 'Manhattan',
+    upgradeCost: 250_000_000,
+    rentPerDay: 80_000,
+    payrollPerEmployee: 900,
+    suppliesPerEmployee: 180,
+    maxEmployees: 100,
+    baseRevenuePerEmployee: 1100,
+    revenueMultiplierRange: [-1.5, 4.0],
+  },
+  {
+    name: 'Wall Street Penthouse',
+    location: 'Lower Manhattan',
+    upgradeCost: 1_000_000_000,
+    rentPerDay: 200_000,
+    payrollPerEmployee: 1300,
+    suppliesPerEmployee: 260,
+    maxEmployees: 150,
+    baseRevenuePerEmployee: 1500,
+    revenueMultiplierRange: [-3.0, 6.0],
+  },
+];
+
+export const EXCHANGE_PRICE = EXCHANGE_TIERS[0].upgradeCost;
 export const EXCHANGE_UNLOCK_CASH = 3_000_000;
-export const MAX_EMPLOYEES = 20;
-export const RENT_PER_DAY = 5_000;
-export const PAYROLL_PER_EMPLOYEE = 300;
-export const SUPPLIES_PER_EMPLOYEE = 50;
-export const BASE_REVENUE_PER_EMPLOYEE = 500;
 /** Daily compounding rate on any emergency loan balance — deliberately punishing. */
 export const LOAN_INTEREST_RATE = 0.2;
 
 export function createInitialExchange(): Exchange {
-  return { owned: false, employees: 0, loanBalance: 0 };
+  return { owned: false, tier: 0, employees: 0, loanBalance: 0 };
 }
 
 export function canBuyExchange(portfolio: Portfolio): boolean {
@@ -249,8 +325,27 @@ export function buyExchange(portfolio: Portfolio, exchange: Exchange): { portfol
   };
 }
 
+export function canUpgradeExchange(portfolio: Portfolio, exchange: Exchange): boolean {
+  if (!exchange.owned) return false;
+  const nextTier = exchange.tier + 1;
+  if (nextTier >= EXCHANGE_TIERS.length) return false;
+  return portfolio.cash >= EXCHANGE_TIERS[nextTier].upgradeCost;
+}
+
+/** Moves the business to the next tier's building/location, deducting that tier's upgrade cost. */
+export function upgradeExchange(portfolio: Portfolio, exchange: Exchange): { portfolio: Portfolio; exchange: Exchange } {
+  if (!canUpgradeExchange(portfolio, exchange)) return { portfolio, exchange };
+  const nextTier = exchange.tier + 1;
+  const cost = EXCHANGE_TIERS[nextTier].upgradeCost;
+  return {
+    portfolio: { ...portfolio, cash: portfolio.cash - cost },
+    exchange: { ...exchange, tier: nextTier },
+  };
+}
+
 export function hireEmployee(exchange: Exchange): Exchange {
-  if (!exchange.owned || exchange.employees >= MAX_EMPLOYEES) return exchange;
+  const maxEmployees = EXCHANGE_TIERS[exchange.tier].maxEmployees;
+  if (!exchange.owned || exchange.employees >= maxEmployees) return exchange;
   return { ...exchange, employees: exchange.employees + 1 };
 }
 
@@ -267,9 +362,11 @@ export interface ExchangeDayResult {
 }
 
 /**
- * Runs one day of business: revenue swings randomly (some days are bad), fixed
- * rent + per-employee payroll/supplies are always due. Any shortfall is covered
- * by an emergency loan at a punishing interest rate; existing debt compounds daily.
+ * Runs one day of business: revenue swings randomly within the current tier's
+ * range (wider and more downside-prone at fancier locations, since employees
+ * are making bigger bets), fixed rent + per-employee payroll/supplies are
+ * always due. Any shortfall is covered by an emergency loan at a punishing
+ * interest rate; existing debt compounds daily.
  */
 export function runExchangeDay(
   portfolio: Portfolio,
@@ -277,9 +374,13 @@ export function runExchangeDay(
 ): { portfolio: Portfolio; exchange: Exchange; result: ExchangeDayResult | null } {
   if (!exchange.owned) return { portfolio, exchange, result: null };
 
-  const revenueMultiplier = 0.3 + Math.random() * 1.4;
-  const revenue = Math.round(exchange.employees * BASE_REVENUE_PER_EMPLOYEE * revenueMultiplier);
-  const expenses = Math.round(RENT_PER_DAY + exchange.employees * (PAYROLL_PER_EMPLOYEE + SUPPLIES_PER_EMPLOYEE));
+  const tier = EXCHANGE_TIERS[exchange.tier];
+  const [minMultiplier, maxMultiplier] = tier.revenueMultiplierRange;
+  const revenueMultiplier = minMultiplier + Math.random() * (maxMultiplier - minMultiplier);
+  const revenue = Math.round(exchange.employees * tier.baseRevenuePerEmployee * revenueMultiplier);
+  const expenses = Math.round(
+    tier.rentPerDay + exchange.employees * (tier.payrollPerEmployee + tier.suppliesPerEmployee)
+  );
   const net = revenue - expenses;
 
   let cash = portfolio.cash + net;

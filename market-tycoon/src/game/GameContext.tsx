@@ -18,6 +18,7 @@ import {
   runExchangeDay,
   sellAsset,
   tickPrices,
+  upgradeExchange,
 } from './gameModel';
 
 interface GameContextValue {
@@ -29,6 +30,7 @@ interface GameContextValue {
   buy: (assetId: string, quantity: number, leverage: number) => void;
   sell: (assetId: string, quantity: number, leverage: number) => void;
   purchaseExchange: () => void;
+  upgradeExchangeTier: () => void;
   hire: () => void;
   fire: () => void;
   payDownLoan: (amount: number) => void;
@@ -65,6 +67,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const purchaseExchange = useCallback(() => {
     const result = buyExchange(portfolio, exchange);
+    setPortfolio(result.portfolio);
+    setExchange(result.exchange);
+  }, [portfolio, exchange]);
+
+  const upgradeExchangeTier = useCallback(() => {
+    const result = upgradeExchange(portfolio, exchange);
     setPortfolio(result.portfolio);
     setExchange(result.exchange);
   }, [portfolio, exchange]);
@@ -145,13 +153,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       buy,
       sell,
       purchaseExchange,
+      upgradeExchangeTier,
       hire,
       fire,
       payDownLoan,
       tick,
       restart,
     }),
-    [portfolio, assets, exchange, events, bankrupt, buy, sell, purchaseExchange, hire, fire, payDownLoan, tick, restart]
+    [
+      portfolio,
+      assets,
+      exchange,
+      events,
+      bankrupt,
+      buy,
+      sell,
+      purchaseExchange,
+      upgradeExchangeTier,
+      hire,
+      fire,
+      payDownLoan,
+      tick,
+      restart,
+    ]
   );
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

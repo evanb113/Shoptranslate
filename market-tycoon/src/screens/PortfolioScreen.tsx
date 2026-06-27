@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
-import { EXCHANGE_UNLOCK_CASH, getMarginUsed, getNetWorth, getUnrealizedPnL } from '../game/gameModel';
+import { EXCHANGE_TIERS, EXCHANGE_UNLOCK_CASH, getMarginUsed, getNetWorth, getUnrealizedPnL } from '../game/gameModel';
 import { useTutorial } from '../onboarding/TutorialContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Portfolio'>;
@@ -44,11 +44,15 @@ export default function PortfolioScreen({ navigation }: Props) {
 
       <Pressable style={styles.exchangeCard} onPress={() => navigation.navigate('Exchange')}>
         <Text style={styles.exchangeCardTitle}>
-          {exchange.owned ? 'My Exchange' : exchangeUnlocked ? 'Exchange Unlocked!' : 'Exchange (Locked)'}
+          {exchange.owned
+            ? EXCHANGE_TIERS[exchange.tier].name
+            : exchangeUnlocked
+              ? 'Exchange Unlocked!'
+              : 'Exchange (Locked)'}
         </Text>
         <Text style={styles.exchangeCardSubtitle}>
           {exchange.owned
-            ? `${exchange.employees} employees · Loan: $${exchange.loanBalance.toFixed(0)}`
+            ? `${EXCHANGE_TIERS[exchange.tier].location} · ${exchange.employees} employees · Loan: $${exchange.loanBalance.toFixed(0)}`
             : exchangeUnlocked
               ? 'Tap to buy a building and start earning.'
               : `Reach $${EXCHANGE_UNLOCK_CASH.toLocaleString()} cash to unlock`}
