@@ -3,13 +3,13 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
-import { getMarginUsed, getNetWorth, getUnrealizedPnL } from '../game/gameModel';
+import { EXCHANGE_UNLOCK_CASH, getMarginUsed, getNetWorth, getUnrealizedPnL } from '../game/gameModel';
 import { useTutorial } from '../onboarding/TutorialContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Portfolio'>;
 
 export default function PortfolioScreen({ navigation }: Props) {
-  const { portfolio, assets, events, bankrupt, tick } = useGame();
+  const { portfolio, assets, exchange, events, bankrupt, tick } = useGame();
   const { openTutorial } = useTutorial();
 
   useEffect(() => {
@@ -18,8 +18,9 @@ export default function PortfolioScreen({ navigation }: Props) {
     }
   }, [bankrupt, navigation]);
 
-  const netWorth = getNetWorth(portfolio, assets);
+  const netWorth = getNetWorth(portfolio, assets, exchange);
   const marginUsed = getMarginUsed(portfolio);
+  const exchangeUnlocked = exchange.owned || portfolio.cash >= EXCHANGE_UNLOCK_CASH;
 
   const holdingsWithAssets = portfolio.holdings
     .map((holding) => {
@@ -40,6 +41,19 @@ export default function PortfolioScreen({ navigation }: Props) {
           <Text style={styles.helpLink}>How to Play</Text>
         </Pressable>
       </View>
+
+      <Pressable style={styles.exchangeCard} onPress={() => navigation.navigate('Exchange')}>
+        <Text style={styles.exchangeCardTitle}>
+          {exchange.owned ? 'My Exchange' : exchangeUnlocked ? 'Exchange Unlocked!' : 'Exchange (Locked)'}
+        </Text>
+        <Text style={styles.exchangeCardSubtitle}>
+          {exchange.owned
+            ? `${exchange.employees} employees · Loan: $${exchange.loanBalance.toFixed(0)}`
+            : exchangeUnlocked
+              ? 'Tap to buy a building and start earning.'
+              : `Reach $${EXCHANGE_UNLOCK_CASH.toLocaleString()} cash to unlock`}
+        </Text>
+      </Pressable>
 
       <Text style={styles.sectionTitle}>Holdings</Text>
       <FlatList
@@ -111,6 +125,15 @@ const styles = StyleSheet.create({
   netWorthLabel: { fontSize: 14, color: '#666' },
   netWorthValue: { fontSize: 32, fontWeight: '700' },
   cashLabel: { fontSize: 14, color: '#333', marginTop: 4 },
+  exchangeCard: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#cdddff',
+  },
+  exchangeCardTitle: { fontSize: 15, fontWeight: '700', color: '#1f3a8f' },
+  exchangeCardSubtitle: { fontSize: 12, color: '#445', marginTop: 2 },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 8 },
   empty: { color: '#999', paddingVertical: 8 },
   row: {

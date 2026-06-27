@@ -81,12 +81,12 @@ export function getHoldingEquity(holding: Holding, currentPrice: number): number
   return holding.marginPosted + getUnrealizedPnL(holding, currentPrice);
 }
 
-export function getNetWorth(portfolio: Portfolio, assets: Asset[]): number {
+export function getNetWorth(portfolio: Portfolio, assets: Asset[], exchange?: Exchange): number {
   const positionsEquity = portfolio.holdings.reduce((sum, h) => {
     const asset = assets.find((a) => a.id === h.assetId);
     return asset ? sum + getHoldingEquity(h, asset.price) : sum;
   }, 0);
-  return portfolio.cash + positionsEquity;
+  return portfolio.cash + positionsEquity - (exchange?.loanBalance ?? 0);
 }
 
 export function getMarginUsed(portfolio: Portfolio): number {
@@ -171,11 +171,11 @@ export function sellAsset(portfolio: Portfolio, asset: Asset, quantity: number, 
   return trade(portfolio, asset, -Math.abs(quantity), leverage);
 }
 
-export function checkMarginCall(portfolio: Portfolio, assets: Asset[]): MarginCallResult {
+export function checkMarginCall(portfolio: Portfolio, assets: Asset[], exchange?: Exchange): MarginCallResult {
   const exposure = getTotalExposure(portfolio, assets);
   if (exposure === 0) return { triggered: false, amountDue: 0 };
 
-  const equity = getNetWorth(portfolio, assets);
+  const equity = getNetWorth(portfolio, assets, exchange);
   const required = exposure * MAINTENANCE_MARGIN_RATIO;
   return equity < required ? { triggered: true, amountDue: required - equity } : { triggered: false, amountDue: 0 };
 }
@@ -183,12 +183,13 @@ export function checkMarginCall(portfolio: Portfolio, assets: Asset[]): MarginCa
 /** Force-closes the worst-performing leveraged position(s) until the margin call clears. */
 export function resolveMarginCall(
   portfolio: Portfolio,
-  assets: Asset[]
+  assets: Asset[],
+  exchange?: Exchange
 ): { portfolio: Portfolio; liquidatedSymbols: string[] } {
   let current = portfolio;
   const liquidatedSymbols: string[] = [];
 
-  while (checkMarginCall(current, assets).triggered && current.holdings.length > 0) {
+  while (checkMarginCall(current, assets, exchange).triggered && current.holdings.length > 0) {
     let worst: Holding | undefined;
     let worstPnL = Infinity;
     for (const h of current.holdings) {
@@ -210,8 +211,104 @@ export function resolveMarginCall(
   return { portfolio: current, liquidatedSymbols };
 }
 
-export function isBankrupt(portfolio: Portfolio, assets: Asset[]): boolean {
-  return getNetWorth(portfolio, assets) <= 0;
+export function isBankrupt(portfolio: Portfolio, assets: Asset[], exchange?: Exchange): boolean {
+  return getNetWorth(portfolio, assets, exchange) <= 0;
+}
+
+// --- Exchange (building/brokerage business) ---
+
+export interface Exchange {
+  owned: boolean;
+  employees: number;
+  loanBalance: number;
+}
+
+export const EXCHANGE_PRICE = 2_000_000;
+export const EXCHANGE_UNLOCK_CASH = 3_000_000;
+export const MAX_EMPLOYEES = 20;
+export const RENT_PER_DAY = 5_000;
+export const PAYROLL_PER_EMPLOYEE = 300;
+export const SUPPLIES_PER_EMPLOYEE = 50;
+export const BASE_REVENUE_PER_EMPLOYEE = 500;
+/** Daily compounding rate on any emergency loan balance — deliberately punishing. */
+export const LOAN_INTEREST_RATE = 0.2;
+
+export function createInitialExchange(): Exchange {
+  return { owned: false, employees: 0, loanBalance: 0 };
+}
+
+export function canBuyExchange(portfolio: Portfolio): boolean {
+  return portfolio.cash >= EXCHANGE_UNLOCK_CASH;
+}
+
+export function buyExchange(portfolio: Portfolio, exchange: Exchange): { portfolio: Portfolio; exchange: Exchange } {
+  if (exchange.owned || portfolio.cash < EXCHANGE_PRICE) return { portfolio, exchange };
+  return {
+    portfolio: { ...portfolio, cash: portfolio.cash - EXCHANGE_PRICE },
+    exchange: { ...exchange, owned: true },
+  };
+}
+
+export function hireEmployee(exchange: Exchange): Exchange {
+  if (!exchange.owned || exchange.employees >= MAX_EMPLOYEES) return exchange;
+  return { ...exchange, employees: exchange.employees + 1 };
+}
+
+export function fireEmployee(exchange: Exchange): Exchange {
+  if (!exchange.owned || exchange.employees <= 0) return exchange;
+  return { ...exchange, employees: exchange.employees - 1 };
+}
+
+export interface ExchangeDayResult {
+  revenue: number;
+  expenses: number;
+  net: number;
+  loanTaken: number;
+}
+
+/**
+ * Runs one day of business: revenue swings randomly (some days are bad), fixed
+ * rent + per-employee payroll/supplies are always due. Any shortfall is covered
+ * by an emergency loan at a punishing interest rate; existing debt compounds daily.
+ */
+export function runExchangeDay(
+  portfolio: Portfolio,
+  exchange: Exchange
+): { portfolio: Portfolio; exchange: Exchange; result: ExchangeDayResult | null } {
+  if (!exchange.owned) return { portfolio, exchange, result: null };
+
+  const revenueMultiplier = 0.3 + Math.random() * 1.4;
+  const revenue = Math.round(exchange.employees * BASE_REVENUE_PER_EMPLOYEE * revenueMultiplier);
+  const expenses = Math.round(RENT_PER_DAY + exchange.employees * (PAYROLL_PER_EMPLOYEE + SUPPLIES_PER_EMPLOYEE));
+  const net = revenue - expenses;
+
+  let cash = portfolio.cash + net;
+  let loanTaken = 0;
+  if (cash < 0) {
+    loanTaken = -cash;
+    cash = 0;
+  }
+
+  const loanBalance = (exchange.loanBalance + loanTaken) * (1 + LOAN_INTEREST_RATE);
+
+  return {
+    portfolio: { ...portfolio, cash },
+    exchange: { ...exchange, loanBalance },
+    result: { revenue, expenses, net, loanTaken },
+  };
+}
+
+export function repayLoan(
+  portfolio: Portfolio,
+  exchange: Exchange,
+  amount: number
+): { portfolio: Portfolio; exchange: Exchange } {
+  const payment = Math.max(0, Math.min(amount, portfolio.cash, exchange.loanBalance));
+  if (payment <= 0) return { portfolio, exchange };
+  return {
+    portfolio: { ...portfolio, cash: portfolio.cash - payment },
+    exchange: { ...exchange, loanBalance: exchange.loanBalance - payment },
+  };
 }
 
 export function tickPrices(assets: Asset[]): Asset[] {

@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from './types';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import AssetDetailScreen from '../screens/AssetDetailScreen';
+import ExchangeScreen from '../screens/ExchangeScreen';
 import BankruptcyScreen from '../screens/BankruptcyScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -14,6 +15,7 @@ export default function RootNavigator() {
       <Stack.Navigator initialRouteName="Portfolio">
         <Stack.Screen name="Portfolio" component={PortfolioScreen} options={{ title: 'Portfolio' }} />
         <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ title: 'Asset' }} />
+        <Stack.Screen name="Exchange" component={ExchangeScreen} options={{ title: 'My Exchange' }} />
         <Stack.Screen
           name="Bankruptcy"
           component={BankruptcyScreen}
