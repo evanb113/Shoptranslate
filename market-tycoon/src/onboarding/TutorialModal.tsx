@@ -9,7 +9,7 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    title: 'Welcome to Market Tycoon',
+    title: 'Welcome to Moon or Bust',
     body:
       'You start with cash and a list of tradeable assets. Your goal: grow your net worth without going bankrupt. Tap "Next Day" on the Portfolio screen to advance the market.',
   },

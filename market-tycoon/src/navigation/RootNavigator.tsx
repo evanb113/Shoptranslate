@@ -5,6 +5,8 @@ import { RootStackParamList } from './types';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import AssetDetailScreen from '../screens/AssetDetailScreen';
 import ExchangeScreen from '../screens/ExchangeScreen';
+import SideHustleScreen from '../screens/SideHustleScreen';
+import VentureScreen from '../screens/VentureScreen';
 import BankruptcyScreen from '../screens/BankruptcyScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -16,6 +18,8 @@ export default function RootNavigator() {
         <Stack.Screen name="Portfolio" component={PortfolioScreen} options={{ title: 'Portfolio' }} />
         <Stack.Screen name="AssetDetail" component={AssetDetailScreen} options={{ title: 'Asset' }} />
         <Stack.Screen name="Exchange" component={ExchangeScreen} options={{ title: 'My Exchange' }} />
+        <Stack.Screen name="SideHustle" component={SideHustleScreen} options={{ title: 'Side Hustle' }} />
+        <Stack.Screen name="Venture" component={VentureScreen} options={{ title: 'Business' }} />
         <Stack.Screen
           name="Bankruptcy"
           component={BankruptcyScreen}

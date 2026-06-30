@@ -52,6 +52,7 @@ export default function AssetDetailScreen({ route }: Props) {
         <Text style={styles.symbol}>{asset.symbol}</Text>
         {asset.type === 'memecoin' && <Text style={styles.memeTag}>MEME</Text>}
         {asset.rugged && <Text style={styles.ruggedTag}>JUST RUGGED</Text>}
+        {asset.jackpot && <Text style={styles.jackpotTag}>JACKPOT!</Text>}
       </View>
       <Text style={styles.price}>${formatPrice(asset.price)}</Text>
 
@@ -126,6 +127,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
     backgroundColor: '#c0392b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  jackpotTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5c4500',
+    backgroundColor: '#ffd54f',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

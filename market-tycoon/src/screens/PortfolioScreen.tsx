@@ -4,19 +4,24 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useGame } from '../game/GameContext';
 import {
+  DAYS_PER_YEAR,
   EXCHANGE_TIERS,
   EXCHANGE_UNLOCK_CASH,
   formatPrice,
+  getDaysIntoCurrentYear,
   getMarginUsed,
   getNetWorth,
+  getSideHustleType,
+  getVentureType,
   getUnrealizedPnL,
+  VENTURE_UNLOCK_CASH,
 } from '../game/gameModel';
 import { useTutorial } from '../onboarding/TutorialContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Portfolio'>;
 
 export default function PortfolioScreen({ navigation }: Props) {
-  const { portfolio, assets, exchange, events, bankrupt, tick } = useGame();
+  const { portfolio, assets, exchange, hustle, venture, events, bankrupt, age, daysElapsed, tick } = useGame();
   const { openTutorial } = useTutorial();
 
   useEffect(() => {
@@ -25,7 +30,7 @@ export default function PortfolioScreen({ navigation }: Props) {
     }
   }, [bankrupt, navigation]);
 
-  const netWorth = getNetWorth(portfolio, assets, exchange);
+  const netWorth = getNetWorth(portfolio, assets, exchange, hustle, venture);
   const marginUsed = getMarginUsed(portfolio);
   const exchangeUnlocked = exchange.owned || portfolio.cash >= EXCHANGE_UNLOCK_CASH;
 
@@ -43,6 +48,9 @@ export default function PortfolioScreen({ navigation }: Props) {
           <Text style={styles.netWorthLabel}>Net Worth</Text>
           <Text style={styles.netWorthValue}>${netWorth.toFixed(2)}</Text>
           <Text style={styles.cashLabel}>Cash: ${portfolio.cash.toFixed(2)} · Margin used: ${marginUsed.toFixed(2)}</Text>
+          <Text style={styles.ageLabel}>
+            Age {age} · Day {getDaysIntoCurrentYear(daysElapsed)}/{DAYS_PER_YEAR}
+          </Text>
         </View>
         <Pressable onPress={openTutorial}>
           <Text style={styles.helpLink}>How to Play</Text>
@@ -63,6 +71,30 @@ export default function PortfolioScreen({ navigation }: Props) {
             : exchangeUnlocked
               ? 'Tap to buy a building and start earning.'
               : `Reach $${EXCHANGE_UNLOCK_CASH.toLocaleString()} cash to unlock`}
+        </Text>
+      </Pressable>
+
+      <Pressable style={styles.hustleCard} onPress={() => navigation.navigate('SideHustle')}>
+        <Text style={styles.hustleCardTitle}>
+          {hustle.typeId ? getSideHustleType(hustle)?.name : 'Start a Side Hustle'}
+        </Text>
+        <Text style={styles.hustleCardSubtitle}>
+          {hustle.typeId
+            ? `${hustle.employees} employees · Loan: $${hustle.loanBalance.toFixed(0)}`
+            : 'Clean driveways, wash windows, mow lawns — cheap to start.'}
+        </Text>
+      </Pressable>
+
+      <Pressable style={styles.ventureCard} onPress={() => navigation.navigate('Venture')}>
+        <Text style={styles.ventureCardTitle}>
+          {venture.typeId ? getVentureType(venture)?.name : 'Bigger Business'}
+        </Text>
+        <Text style={styles.ventureCardSubtitle}>
+          {venture.typeId
+            ? `${venture.employees} employees · Loan: $${venture.loanBalance.toFixed(0)}${venture.lawyerRetainer ? ' · Lawyer: On' : ''}`
+            : portfolio.cash >= VENTURE_UNLOCK_CASH
+              ? 'Construction, collision repair, mechanic — tap to start.'
+              : `Reach $${VENTURE_UNLOCK_CASH.toLocaleString()} cash to unlock`}
         </Text>
       </Pressable>
 
@@ -108,6 +140,7 @@ export default function PortfolioScreen({ navigation }: Props) {
               <Text style={styles.symbol}>{asset.symbol}</Text>
               {asset.type === 'memecoin' && <Text style={styles.memeTag}>MEME</Text>}
               {asset.rugged && <Text style={styles.ruggedTag}>RUGGED</Text>}
+              {asset.jackpot && <Text style={styles.jackpotTag}>JACKPOT</Text>}
             </View>
             <Text style={styles.value}>${formatPrice(asset.price)}</Text>
           </Pressable>
@@ -140,6 +173,7 @@ const styles = StyleSheet.create({
   netWorthLabel: { fontSize: 14, color: '#666' },
   netWorthValue: { fontSize: 32, fontWeight: '700' },
   cashLabel: { fontSize: 14, color: '#333', marginTop: 4 },
+  ageLabel: { fontSize: 12, color: '#888', marginTop: 4 },
   exchangeCard: {
     backgroundColor: '#f0f4ff',
     borderRadius: 10,
@@ -149,6 +183,26 @@ const styles = StyleSheet.create({
   },
   exchangeCardTitle: { fontSize: 15, fontWeight: '700', color: '#1f3a8f' },
   exchangeCardSubtitle: { fontSize: 12, color: '#445', marginTop: 2 },
+  hustleCard: {
+    backgroundColor: '#f0fff4',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#c8ecd4',
+    marginTop: 10,
+  },
+  hustleCardTitle: { fontSize: 15, fontWeight: '700', color: '#1f7a3f' },
+  hustleCardSubtitle: { fontSize: 12, color: '#445', marginTop: 2 },
+  ventureCard: {
+    backgroundColor: '#fff8f0',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#f0d9b5',
+    marginTop: 10,
+  },
+  ventureCardTitle: { fontSize: 15, fontWeight: '700', color: '#8b4513' },
+  ventureCardSubtitle: { fontSize: 12, color: '#445', marginTop: 2 },
   sectionTitle: { fontSize: 16, fontWeight: '600', marginTop: 12, marginBottom: 8 },
   empty: { color: '#999', paddingVertical: 8 },
   row: {
@@ -175,6 +229,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
     backgroundColor: '#c0392b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  jackpotTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5c4500',
+    backgroundColor: '#ffd54f',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
